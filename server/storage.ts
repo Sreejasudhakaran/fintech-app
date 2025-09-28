@@ -56,6 +56,7 @@ export class MemStorage implements IStorage {
     const expense: Expense = {
       ...insertExpense,
       id,
+      note: insertExpense.note ?? null,
       createdAt: new Date()
     };
     this.expenses.set(id, expense);
