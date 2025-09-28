@@ -3,12 +3,11 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { insertExpenseSchema, loginSchema } from "@shared/schema";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Initialize OpenAI client
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR || "default_key"
-});
+// Initialize Gemini client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "default_key");
+const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -80,34 +79,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         note: expense.note || ''
       }));
 
-      const prompt = `
-        Based on these recent expenses, provide 2 short saving tips in under 40 words each:
-        
-        ${JSON.stringify(expenseData, null, 2)}
-        
-        Please respond in JSON format with an array of tips:
-        {
-          "tips": ["tip1", "tip2"]
-        }
-      `;
+      const prompt = `You are a financial advisor AI. Analyze expense data and provide practical, actionable saving tips.
 
-      // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-      const response = await openai.chat.completions.create({
-        model: "gpt-5",
-        messages: [
-          {
-            role: "system",
-            content: "You are a financial advisor AI. Analyze expense data and provide practical, actionable saving tips in JSON format."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        response_format: { type: "json_object" },
-      });
+Based on these recent expenses, provide 2 short saving tips in under 40 words each:
+        
+${JSON.stringify(expenseData, null, 2)}
+        
+Please respond in JSON format with an array of tips:
+{
+  "tips": ["tip1", "tip2"]
+}`;
 
-      const aiResponse = JSON.parse(response.choices[0].message.content || '{"tips": []}');
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // Try to parse JSON response, fallback to extracting tips from text
+      let aiResponse;
+      try {
+        aiResponse = JSON.parse(text);
+      } catch (parseError) {
+        // If JSON parsing fails, extract tips from the text
+        const tips = text.split('\n').filter(line => 
+          line.trim().length > 0 && 
+          !line.includes('{') && 
+          !line.includes('}') &&
+          line.trim().length < 100
+        ).slice(0, 2);
+        
+        aiResponse = { tips: tips.length > 0 ? tips : ["Try tracking your expenses for a week to identify spending patterns.", "Consider setting a monthly budget for each category to better control your finances."] };
+      }
       
       res.json(aiResponse);
     } catch (error: any) {

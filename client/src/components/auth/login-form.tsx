@@ -31,7 +31,7 @@ export function LoginForm() {
         await signUp(data.email, data.password);
         toast({
           title: "Account created!",
-          description: "Please check your email to verify your account.",
+          description: "Your account has been created successfully. You can now sign in.",
         });
       } else {
         await signIn(data.email, data.password);
