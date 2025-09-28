@@ -1,0 +1,112 @@
+Build a modern FinTech web app called “Budget Buddy”.
+This app is a personal finance tracker with AI-powered savings advice.
+It must be built using React + TailwindCSS, with Supabase for authentication & database, and easily deployable on Netlify.
+
+🔑 Features & Requirements
+1. Authentication (Supabase)
+
+Implement sign up, login, and logout using Supabase Auth.
+
+Users must only see their own data after login.
+
+2. Database (Supabase)
+
+Create a table: expenses with columns:
+
+id (primary key, uuid)
+
+user_id (references Supabase auth user)
+
+amount (float)
+
+category (text)
+
+date (date)
+
+note (text)
+
+Ensure all expenses are linked to the logged-in user only.
+
+3. Dashboard
+
+Show total expenses for the current month with an animated counter effect.
+
+Display a pie chart of expenses grouped by category using Recharts (preferred) or Chart.js.
+
+Add smooth page transitions with Framer Motion.
+
+4. Expense Entry Form
+
+Build a modern card-style form with floating input labels for:
+
+Amount (number input)
+
+Category (dropdown: Food, Transport, Shopping, Bills, Others)
+
+Note (text input)
+
+On submit, insert data into Supabase and show a success animation (e.g., a green checkmark popup).
+
+5. AI Advice Feature
+
+Add a section called “Get Smart Advice”.
+
+When the user clicks the button:
+
+Fetch the last 10 expenses from Supabase (in JSON).
+
+Send this data to OpenAI API (GPT-4o-mini or GPT-4) with a prompt like:
+
+“Based on these expenses, give 2 short saving tips in under 40 words each.”
+
+Display the response in a chat bubble UI with a typing animation.
+
+6. About Page
+
+Simple page with text:
+
+“App Published by Sreeja Thati”
+
+Add a card flip animation when hovering or loading.
+
+7. UI/UX Guidelines
+
+Use modern finance app design:
+
+Gradient backgrounds
+
+Rounded cards with drop shadows
+
+Smooth hover animations on buttons
+
+Mobile responsive layout
+
+Apply Framer Motion animations for page transitions, hover effects, and chat typing.
+
+8. Deployment
+
+Ensure the app is ready for deployment on Netlify (frontend only).
+
+Supabase will serve as backend for auth + database.
+
+⚙️ Tech Stack
+
+React + TailwindCSS → frontend UI.
+
+Framer Motion → animations.
+
+Recharts / Chart.js → charts.
+
+Supabase → authentication + database.
+
+OpenAI API (GPT-4o-mini or GPT-4) → AI financial tips.
+
+Netlify → deployment target.
+
+📝 Make sure the generated project includes:
+
+supabaseClient.ts setup.
+
+.env for Supabase + OpenAI API keys.
+
+Clear README.md with setup + deployment instructions.
