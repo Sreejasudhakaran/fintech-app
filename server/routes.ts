@@ -4,14 +4,17 @@ import { z } from "zod";
 import { storage } from "./storage";
 import { insertExpenseSchema, loginSchema } from "@shared/schema";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
 
-// Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "default_key");
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+dotenv.config({ path: "./server/.env" });
+
+// Gemini setup
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
-  // Auth endpoints
+  // ---------- Auth endpoints ----------
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const data = loginSchema.parse(req.body);
@@ -26,23 +29,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const data = loginSchema.parse(req.body);
       const user = await storage.getUserByEmail(data.email);
-      
+
       if (!user || user.password !== data.password) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
-      
+
       res.json({ user: { id: user.id, email: user.email } });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
   });
 
-  // Expenses endpoints
+  // ---------- Expenses endpoints ----------
   app.get("/api/expenses", async (req, res) => {
     try {
-      // In a real app, you'd get the user ID from the session/token
-      // For now, we'll use a mock user ID or get it from query params
-      const userId = req.query.userId as string || "mock-user-id";
+      const userId = (req.query.userId as string) || "mock-user-id";
       const expenses = await storage.getExpensesByUserId(userId);
       res.json(expenses);
     } catch (error: any) {
@@ -53,8 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/expenses", async (req, res) => {
     try {
       const data = insertExpenseSchema.parse(req.body);
-      // In a real app, you'd get the user ID from the session/token
-      const userId = req.query.userId as string || "mock-user-id";
+      const userId = (req.query.userId as string) || "mock-user-id";
       const expense = await storage.createExpense({ ...data, userId });
       res.json(expense);
     } catch (error: any) {
@@ -62,67 +62,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI Advice endpoint
-  app.post("/api/ai-advice", async (req, res) => {
-    try {
-      const { expenses } = req.body;
-      
-      if (!expenses || expenses.length === 0) {
-        return res.status(400).json({ message: "No expenses provided" });
-      }
+  // ---------- AI Advice endpoint ----------
+app.post("/api/ai-advice", async (req, res) => {
+  try {
+    const expenses = req.body.expenses; // expects array of expenses
+    if (!expenses || expenses.length === 0) {
+      return res.status(400).json({ message: "Expenses data required" });
+    }
 
-      // Prepare expense data for AI analysis
-      const expenseData = expenses.slice(0, 10).map((expense: any) => ({
-        amount: expense.amount,
-        category: expense.category,
-        date: expense.date,
-        note: expense.note || ''
-      }));
+    const prompt = `You are a financial advisor AI. 
+Analyze the following expense data and provide 2 short saving tips in under 40 words each.
 
-      const prompt = `You are a financial advisor AI. Analyze expense data and provide practical, actionable saving tips.
+Expenses:
+${JSON.stringify(expenses, null, 2)}
 
-Based on these recent expenses, provide 2 short saving tips in under 40 words each:
-        
-${JSON.stringify(expenseData, null, 2)}
-        
-Please respond in JSON format with an array of tips:
+Respond with ONLY valid JSON. 
+Do NOT add markdown, code fences, or explanations.
+
+Format:
 {
   "tips": ["tip1", "tip2"]
 }`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      // Try to parse JSON response, fallback to extracting tips from text
-      let aiResponse;
-      try {
-        aiResponse = JSON.parse(text);
-      } catch (parseError) {
-        // If JSON parsing fails, extract tips from the text
-        const tips = text.split('\n').filter(line => 
-          line.trim().length > 0 && 
-          !line.includes('{') && 
-          !line.includes('}') &&
-          line.trim().length < 100
-        ).slice(0, 2);
-        
-        aiResponse = { tips: tips.length > 0 ? tips : ["Try tracking your expenses for a week to identify spending patterns.", "Consider setting a monthly budget for each category to better control your finances."] };
-      }
-      
-      res.json(aiResponse);
-    } catch (error: any) {
-      console.error('AI Advice Error:', error);
-      res.status(500).json({ 
-        message: "Failed to get AI advice",
-        tips: [
-          "Try tracking your expenses for a week to identify spending patterns.",
-          "Consider setting a monthly budget for each category to better control your finances."
-        ]
-      });
-    }
-  });
+    const result = await model.generateContent(prompt);
+    let raw = result.response.text();
 
-  const httpServer = createServer(app);
-  return httpServer;
+    // Clean output (remove ```json and ``` if model still adds them)
+    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    let aiResponse;
+    try {
+      aiResponse = JSON.parse(raw);
+    } catch (err) {
+      console.warn("JSON parse failed. Raw text:", raw);
+
+      // fallback: try extracting lines
+      const tips = raw
+        .split("\n")
+        .map((line) => line.trim().replace(/^[-*•]\s*/, "")) // clean bullets
+        .filter(
+          (line) =>
+            line.length > 0 &&
+            !line.includes("{") &&
+            !line.includes("}") &&
+            line.length < 100
+        )
+        .slice(0, 2);
+
+      aiResponse = {
+        tips:
+          tips.length > 0
+            ? tips
+            : [
+                "Track your expenses weekly to identify spending leaks.",
+                "Set a monthly budget per category to stay disciplined.",
+              ],
+      };
+    }
+
+    res.json(aiResponse);
+  } catch (error: any) {
+    console.error("AI Advice Error:", error);
+    res.status(500).json({
+      message: "Failed to get AI advice",
+      tips: [
+        "Track your expenses weekly to identify spending leaks.",
+        "Set a monthly budget per category to stay disciplined.",
+      ],
+    });
+  }
+});
+
+const httpServer = createServer(app);
+return httpServer;
 }
